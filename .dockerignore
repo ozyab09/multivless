@@ -1,0 +1,18 @@
+.git
+.gitignore
+.github
+.tools
+.vscode
+.idea
+bin
+run
+dist
+*.log
+*.deb
+*.test
+**/.DS_Store
+
+# Rebuilt inside the image
+web/node_modules
+web/tsconfig.tsbuildinfo
+internal/web/dist

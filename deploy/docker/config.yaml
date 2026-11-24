@@ -1,0 +1,82 @@
+app:
+  name: multivless
+  log_level: info
+  data_dir: /var/lib/multivless
+
+engine:
+  type: sing-box
+  binary: /usr/local/bin/sing-box
+  config_path: /var/lib/multivless/sing-box.json
+  clash_api: 127.0.0.1:19091
+  lanes: 8
+  start_timeout: 20s
+  restart_on_failure: true
+  restart_delay: 5s
+  log_level: warn
+
+storage:
+  # Lives in the multivless-data volume; contains server credentials and
+  # Argon2id password hashes, so treat it as a secret.
+  path: /var/lib/multivless/multivless.db
+
+api:
+  enabled: true
+  # 0.0.0.0 is reachable from the host through the published port; it is only
+  # allowed because SOCKS5 authentication below is enabled.
+  listen: 0.0.0.0
+  port: 8080
+  # Better: leave empty here and set MULTIVLESS_API_TOKEN in the environment
+  # (docker-compose.yml does this). An empty token makes the gateway generate
+  # a random one and log it once, which is easy to miss in container logs.
+  token: ""
+
+socks5:
+  enabled: true
+  listen: 0.0.0.0
+  port: 1080
+  authentication: true
+  allow_no_auth: false
+  max_connections: 1024
+  connection_timeout: 10s
+  idle_timeout: 120s
+  # Seeded into an empty database only; manage users via the web UI afterwards.
+  # Change this password before exposing the container beyond localhost.
+  users:
+    - username: demo
+      password: changeme
+
+balancer:
+  strategy: round-robin
+  fallback_strategy: least-latency
+  max_attempts: 2
+  weights:
+    latency: 0.30
+    connections: 0.25
+    throughput: 0.35
+    reliability: 0.10
+
+geoip:
+  # Mounted from ./geoip.dat (scripts/fetch-geoip.sh); optional.
+  path: /etc/multivless/geoip.dat
+
+health_check:
+  enabled: true
+  # Fallback for manually added servers; subscriptions use their own
+  # server_check_seconds (30s by default).
+  interval: 30s
+  timeout: 5s
+  failures_before_offline: 3
+  successes_before_online: 2
+  concurrency: 4
+  url: https://www.gstatic.com/generate_204
+  fallback_urls:
+    - http://www.google.com/gen_204
+    - https:////www.cloudflare.com/
+
+subscriptions:
+  interval: 1h
+  timeout: 30s
+  max_size: 2097152
+  # Subscriptions usually point at public HTTPS hosts; keep this false in
+  # production so a subscription cannot be used to reach internal services.
+  allow_private_hosts: false

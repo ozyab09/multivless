@@ -1,0 +1,97 @@
+# Multi-Exit VLESS Gateway — configuration example.
+# After copying, replace the example servers with real VLESS URIs.
+# Servers and subscriptions added through the web UI live in SQLite and take
+# precedence over this file once the database is non-empty.
+
+app:
+  name: multivless
+  log_level: info
+  data_dir: /var/lib/multivless
+
+engine:
+  type: sing-box
+  binary: /usr/bin/sing-box
+  config_path: /var/lib/multivless/sing-box.json
+  clash_api: 127.0.0.1:19091
+  # Number of data lanes used to reach sing-box. More lanes reduce contention.
+  lanes: 8
+  start_timeout: 15s
+  restart_on_failure: true
+  restart_delay: 5s
+  log_level: warn
+
+socks5:
+  enabled: true
+  listen: 127.0.0.1
+  port: 1080
+  authentication: true
+  allow_no_auth: false
+  network: tcp
+  max_connections: 10000
+  connection_timeout: 30s
+  idle_timeout: 5m
+  # Seeded into an empty database only; manage users via the web UI afterwards.
+  users:
+    - username: alice
+      password: change-me
+
+# Persistent state: servers, subscriptions, SOCKS5 users and settings.
+# The file also contains VLESS credentials; keep it 0600.
+storage:
+  path: /var/lib/multivless/multivless.db
+
+# REST API + embedded web UI. The admin token is a single bearer token;
+# leave it empty to generate a random one (logged once at startup) or set
+# MULTIVLESS_API_TOKEN in the environment.
+api:
+  enabled: true
+  listen: 127.0.0.1
+  port: 8080
+  token: ""
+
+# Remote subscriptions (base64 or plain URI lists).
+subscriptions:
+  interval: 6h
+  timeout: 30s
+  max_size: 2097152
+  # Must stay false in production: true allows fetching from private addresses
+  # (only useful for local tests).
+  allow_private_hosts: false
+
+# Optional country database for the Logs tab (DNS entries show a flag).
+# Download it with scripts/fetch-geoip.sh; without the file logs still work.
+geoip:
+  path: /etc/multivless/geoip.dat
+
+balancer:
+  strategy: adaptive
+  fallback_strategy: round-robin
+  max_attempts: 2
+  degraded_latency_ms: 500
+  weights:
+    latency: 0.30
+    connections: 0.25
+    throughput: 0.35
+    reliability: 0.10
+
+health_check:
+  enabled: true
+  # Default probe interval for manually added servers; subscription servers
+  # use their per-subscription server_check_seconds (30 by default).
+  interval: 30s
+  timeout: 5s
+  failures_before_offline: 3
+  successes_before_online: 2
+  concurrency: 20
+  url: https://www.gstatic.com/generate_204
+  fallback_urls:
+    - https://www.google.com/generate_204
+
+# Manual VLESS URIs.
+servers:
+  - vless://00000000-0000-4000-8000-000000000000@203.0.113.10:443?security=reality&sni=example.com&fp=chrome&pbk=REPLACE_WITH_PUBLIC_KEY&sid=0123&type=tcp&flow=xtls-rprx-vision#Amsterdam-1
+  - vless://00000000-0000-4000-8000-000000000001@203.0.113.11:443?security=tls&sni=example.org&fp=chrome&type=ws&host=example.org&path=%2Fws#Frankfurt-1
+
+# Optional: files with VLESS URIs, one per line, or base64 subscription bodies.
+# sources:
+#   - /etc/multivless/servers.txt

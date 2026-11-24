@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-Exit VLESS Gateway</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1115;
+        --panel: #161a21;
+        --border: #262c37;
+        --text: #e7ecf3;
+        --muted: #8b97a8;
+        --accent: #4ea1ff;
+        --ok: #2fbf71;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: radial-gradient(1200px 600px at 20% -10%, #1b2740, var(--bg));
+        color: var(--text);
+        line-height: 1.55;
+      }
+      main { max-width: 860px; margin: 0 auto; padding: 72px 24px 96px; }
+      h1 { font-size: clamp(2rem, 6vw, 3.4rem); margin: 0 0 8px; letter-spacing: -0.02em; }
+      h1 span { color: var(--accent); }
+      .tagline { color: var(--muted); font-size: 1.15rem; max-width: 620px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 40px 0; }
+      .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+      .card h2 { margin: 0 0 8px; font-size: 1rem; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+      code { background: #0b0d11; border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: 0.9em; }
+      pre { background: #0b0d11; border: 1px solid var(--border); border-radius: 10px; padding: 16px; overflow-x: auto; }
+      a { color: var(--accent); }
+      .links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+      .links a {
+        display: inline-block; padding: 10px 16px; border-radius: 8px; text-decoration: none;
+        border: 1px solid var(--border); background: var(--panel);
+      }
+      .links a.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 600; }
+      footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; }
+      .ok { color: var(--ok); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>multi<span>vless</span></h1>
+      <p class="tagline">
+        SOCKS5-шлюз, который держит все VLESS-серверы активными и выбирает
+        исходящий узел отдельно для каждого TCP-соединения. Fail-closed, Web UI,
+        XHTTP, история соединений и логи с флагами стран.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <h2>⚖️ Балансировка на соединение</h2>
+          <p>adaptive, round-robin, least-latency и другие стратегии; health-check через сам туннель.</p>
+        </div>
+        <div class="card">
+          <h2>🔐 Fail-closed</h2>
+          <p>Нет живых серверов — нет выхода. Direct существует только для torrent-bypass по явному флагу.</p>
+        </div>
+        <div class="card">
+          <h2>📊 Web UI</h2>
+          <p>График трафика, история соединений, подписки с редактированием и частотами проверки.</p>
+        </div>
+        <div class="card">
+          <h2>🧾 Логи и DNS</h2>
+          <p>Старт и завершение соединений, DNS-ответы с IP и флагом страны по geoip.dat.</p>
+        </div>
+        <div class="card">
+          <h2>🐳 Docker</h2>
+          <p>Non-root, read-only rootfs, только localhost-порты, GOMEMLIMIT для небольших VPS.</p>
+        </div>
+        <div class="card">
+          <h2>🌐 XHTTP</h2>
+          <p>Сборка sing-box-lx с with_xhttp; режим auto автоматически сводится к stream-one.</p>
+        </div>
+      </div>
+
+      <h2>Быстрый старт</h2>
+      <pre><code>./scripts/fetch-geoip.sh           # флаги стран (необязательно)
+export MULTIVLESS_API_TOKEN="$(openssl rand -hex 16)"
+docker compose up --build -d
+# UI: http://localhost:8080, SOCKS5: 127.0.0.1:1080</code></pre>
+
+      <div class="links" id="links">
+        <a class="primary" id="repo" href="https://github.com">Исходники на GitHub</a>
+        <a id="readme" href="https://github.com">README</a>
+      </div>
+
+      <footer>
+        sing-box-lx распространяется под GPLv3 и скачивается при сборке образа.
+        Страница собрана из <code>docs/</code> через GitHub Actions.
+      </footer>
+    </main>
+    <script>
+      // For project pages (user.github.io/repo/) link back to the repository.
+      const parts = location.pathname.split('/').filter(Boolean)
+      const owner = location.hostname.endsWith('github.io') ? location.hostname.split('.')[0] : ''
+      if (owner && parts.length) {
+        const repo = `https://github.com/${owner}/${parts[0]}`
+        document.getElementById('repo').href = repo
+        document.getElementById('readme').href = `${repo}/blob/main/README.md`
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+# build artifacts
+/bin/
+dist/
+*.deb
+*.test
+
+# local tooling and runtime data
+.tools/
+/run/
+*.log
+# downloaded by scripts/fetch-geoip.sh, mounted into the container
+/geoip.dat
+
+# editor
+.idea/
+.vscode/
+.DS_Store

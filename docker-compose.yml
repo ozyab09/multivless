@@ -1,0 +1,43 @@
+services:
+  multivless:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-0.2.0}
+    image: multivless:local
+    container_name: multivless
+    restart: unless-stopped
+    environment:
+      # Admin token for the web UI and REST API. Change it, or export
+      # MULTIVLESS_API_TOKEN before `docker compose up`.
+      MULTIVLESS_API_TOKEN: ${MULTIVLESS_API_TOKEN:-local-dev-token}
+      # Keeps the Go heap small on a VPS; raise if you proxy many slow flows.
+      GOMEMLIMIT: ${GOMEMLIMIT:-128MiB}
+      GOGC: ${GOGC:-50}
+    ports:
+      # Bound to localhost on purpose: the gateway is fail-closed but the admin
+      # token is the only protection of the API.
+      - "127.0.0.1:1080:1080" # SOCKS5
+      - "127.0.0.1:8080:8080" # web UI + REST API
+    volumes:
+      - multivless-data:/var/lib/multivless
+      # Uncomment to edit the configuration without rebuilding the image:
+      - ./deploy/docker/config.yaml:/etc/multivless/config.yaml:ro
+      # Country flags for DNS entries. Fetch it with scripts/fetch-geoip.sh;
+      # the file is gitignored and optional (logs still work without it).
+      - ./geoip.dat:/etc/multivless/geoip.dat:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  multivless-data:
