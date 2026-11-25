@@ -38,6 +38,7 @@ type Config struct {
 	App           App           `yaml:"app"`
 	Engine        Engine        `yaml:"engine"`
 	SOCKS5        SOCKS5        `yaml:"socks5"`
+	HTTPProxy     HTTPProxy     `yaml:"http_proxy"`
 	Balancer      Balancer      `yaml:"balancer"`
 	HealthCheck   Health        `yaml:"health_check"`
 	Storage       Storage       `yaml:"storage"`
@@ -144,11 +145,24 @@ type SOCKS5 struct {
 	Users             []User   `yaml:"users"`
 }
 
-// User is a SOCKS5 account. Stage 1 keeps passwords in the config file; the
-// Argon2id hash in SQLite arrives with the storage stage.
+// User is a SOCKS5/HTTP proxy account. Stage 1 keeps passwords in the config
+// file; the Argon2id hash in SQLite arrives with the storage stage.
 type User struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+}
+
+// HTTPProxy is the inbound HTTP CONNECT / transparent proxy configuration.
+type HTTPProxy struct {
+	Enabled           bool   `yaml:"enabled"`
+	Listen            string `yaml:"listen"`
+	Port              int    `yaml:"port"`
+	Authentication    bool   `yaml:"authentication"`
+	AllowNoAuth       bool   `yaml:"allow_no_auth"`
+	MaxConnections    int    `yaml:"max_connections"`
+	ConnectionTimeout Duration `yaml:"connection_timeout"`
+	IdleTimeout       Duration `yaml:"idle_timeout"`
+	Users             []User `yaml:"users"`
 }
 
 // Health configures periodic liveness checks that run through each outbound.
@@ -186,6 +200,14 @@ func Default() Config {
 			ConnectionTimeout: Duration(30 * time.Second),
 			IdleTimeout:       Duration(5 * time.Minute),
 			Network:           "tcp",
+		},
+		HTTPProxy: HTTPProxy{
+			Enabled:           false,
+			Listen:            "127.0.0.1",
+			Port:              3128,
+			MaxConnections:    10000,
+			ConnectionTimeout: Duration(30 * time.Second),
+			IdleTimeout:       Duration(5 * time.Minute),
 		},
 		Balancer: Balancer{
 			Strategy:          StrategyAdaptive,
@@ -370,6 +392,43 @@ func (c Config) Validate() error {
 	}
 	if c.Subscriptions.Interval.Std() < 10*time.Second {
 		return fmt.Errorf("subscriptions.interval must be at least 10s")
+	}
+
+	// Validate http_proxy when enabled.
+	if c.HTTPProxy.Enabled {
+		if c.HTTPProxy.Listen == "" {
+			return fmt.Errorf("http_proxy.listen is required")
+		}
+		if ip := net.ParseIP(c.HTTPProxy.Listen); ip == nil {
+			return fmt.Errorf("http_proxy.listen must be an IP address, got %q", c.HTTPProxy.Listen)
+		} else if !ip.IsLoopback() && !c.HTTPProxy.Authentication && !c.HTTPProxy.AllowNoAuth {
+			return fmt.Errorf("http_proxy.listen=%s is not loopback: authentication is required", c.HTTPProxy.Listen)
+		}
+		if c.HTTPProxy.Port < 1 || c.HTTPProxy.Port > 65535 {
+			return fmt.Errorf("http_proxy.port out of range: %d", c.HTTPProxy.Port)
+		}
+		if c.HTTPProxy.MaxConnections < 1 {
+			return fmt.Errorf("http_proxy.max_connections must be positive")
+		}
+		if c.HTTPProxy.Authentication && len(c.HTTPProxy.Users) == 0 {
+			return fmt.Errorf("http_proxy.authentication=true requires at least one user")
+		}
+		seen := map[string]bool{}
+		for i, u := range c.HTTPProxy.Users {
+			if u.Username == "" || u.Password == "" {
+				return fmt.Errorf("http_proxy.users[%d]: username and password are required", i)
+			}
+			if seen[u.Username] {
+				return fmt.Errorf("http_proxy.users[%d]: duplicate username %q", i, u.Username)
+			}
+			seen[u.Username] = true
+		}
+		if c.SOCKS5.Enabled && c.HTTPProxy.Port == c.SOCKS5.Port {
+			return fmt.Errorf("http_proxy.port=%d conflicts with socks5.port=%d", c.HTTPProxy.Port, c.SOCKS5.Port)
+		}
+		if c.API.Enabled && c.HTTPProxy.Port == c.API.Port {
+			return fmt.Errorf("http_proxy.port=%d conflicts with api.port=%d", c.HTTPProxy.Port, c.API.Port)
+		}
 	}
 
 	// Servers may also come from the database (subscriptions), so an empty
