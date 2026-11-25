@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/multivless/multivless/internal/eventlog"
 	"github.com/multivless/multivless/internal/geoip"
 	"github.com/multivless/multivless/internal/health"
+	"github.com/multivless/multivless/internal/httpproxy"
 	"github.com/multivless/multivless/internal/router"
 	"github.com/multivless/multivless/internal/servers"
 	"github.com/multivless/multivless/internal/socks5"
@@ -42,6 +44,7 @@ type App struct {
 	health   *health.Checker
 	subs     *subscriptions.Manager
 	gateway  *socks5.Gateway
+	httpGw   *httpproxy.Gateway
 }
 
 // New prepares the application without starting network activity.
@@ -49,8 +52,8 @@ func New(cfg config.Config, version string, logger *slog.Logger) *App {
 	return &App{cfg: cfg, version: version, logger: logger}
 }
 
-// Run starts storage, the engine, health checks, subscriptions, the API and the
-// SOCKS5 gateway. It blocks until the context is cancelled.
+// Run starts storage, the engine, health checks, subscriptions, the API, the
+// SOCKS5 gateway (and optional HTTP proxy). It blocks until the context is cancelled.
 func (a *App) Run(ctx context.Context) error {
 	store, err := storage.Open(a.cfg.Storage.Path)
 	if err != nil {
@@ -139,6 +142,12 @@ func (a *App) Run(ctx context.Context) error {
 	auth := users.NewAuthenticator(a.store, a.logger)
 	a.gateway = socks5.New(a.cfg.SOCKS5, auth, connRouter.Dial, a.logger)
 
+	var httpGw *httpproxy.Gateway
+	if a.cfg.HTTPProxy.Enabled {
+		httpGw = httpproxy.New(a.cfg.HTTPProxy, auth, connRouter.Dial, a.logger)
+		a.logger.Info("http proxy enabled", "addr", net.JoinHostPort(a.cfg.HTTPProxy.Listen, fmt.Sprint(a.cfg.HTTPProxy.Port)))
+	}
+
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -172,6 +181,14 @@ func (a *App) Run(ctx context.Context) error {
 	go a.subs.Run(runCtx)
 
 	err = a.gateway.Listen(runCtx)
+	if httpGw != nil {
+		if httpErr := httpGw.Listen(runCtx); httpErr != nil {
+			a.logger.Warn("http proxy listen failed", "error", httpErr)
+			// don't fail the whole service if only http proxy fails
+		} else {
+			a.logger.Info("http proxy listening", "addr", httpGw.Addr())
+		}
+	}
 	if value := apiErr.Load(); value != nil {
 		if err == nil {
 			return value.(error)
